@@ -1,4 +1,4 @@
-Clone the project as follow:
+## Clone the project as follow:
 ```
 git clone --recurse-submodules https://github.com/jwseo-dku/DES-2025.git
 ```
