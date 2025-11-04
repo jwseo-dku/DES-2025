@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2019 Arm Limited. All rights reserved.
+ * Copyright (c) 2013-2021 Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -639,6 +639,14 @@ __WEAK void _platform_post_stackheap_init (void) {
 
 extern void software_init_hook (void);
 __WEAK void software_init_hook (void) {
+  (void)osKernelInitialize();
+}
+
+#elif defined(__ICCARM__)
+
+extern void $Super$$__iar_data_init3 (void);
+void $Sub$$__iar_data_init3 (void) {
+  $Super$$__iar_data_init3();
   (void)osKernelInitialize();
 }
 

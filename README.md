@@ -1,177 +1,73 @@
-# DKU-DES-2025
+# cortex-mv8-experiments
 
-To start, you can clone this project using the following command:
+Based on
+- Arm CoreLink SIE-300 AXI5 System IP for Embedded Technical Reference Manual:
+  https://developer.arm.com/documentation/101526/0100/
+
+- AN505 - Example IoT Kit Subsystem Design for a V2M-MPS2+:
+  https://developer.arm.com/documentation/dai0505/b/
+
+Clone the project as follow:
 ```
-git clone --recurse-submodules https://github.com/jwseo-dku/DES-2025.git
-```
-
-It will create a folder called `DES-2025`.
-
-## Prerequisites
-
-It is necessary to have `build-essential`, `make` and `git`:
-```
-sudo apt -y install git make build-essential
+git clone --recurse-submodules <URL> 
 ```
 
-### CMSIS
-
-During the clone of the project, CMSIS is already downloaded and configured
-to be built in the Makefile of the project.
-
-The path to CMSIS in the Makefile is stored in variable CMSIS.
-
-### Install QEMU
-
-Before compiling and running programs, you need to install `QEMU`:
-- Using apt from Ubuntu
-```
-sudo apt -y install qemu-system-arm
-```
-
-### Get the Arm Cortex-M toolchain
-
-This project will cross-compile a C application from an intel processor
-(like most Laptop, Desktop running on a `x86` or `x86_64` architecture) to
-an Arm V7M core.
-
-The toolchain can be found on Arm website:
-https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads
-
-The version used for this project is gcc-arm-none-eabi-9-2019-q4-major.
-```
-wget "https://developer.arm.com/-/media/Files/downloads/gnu-rm/9-2019q4/gcc-arm-none-eabi-9-2019-q4-major-x86_64-linux.tar.bz2"
-
-tar xvf gcc-arm-none-eabi-9-2019-q4-major-x86_64-linux.tar.bz2
-```
-
-The Makefile is also configured to get this toolchain through the variable
-TOOLCHAIN.
-
-## Compile and run the project
-
-The Makefile is gathering all the compilation flags, source files and includes
-to compile the final binary.
-The command to be used is `make` which should output something like:
+## Get QEMU
 
 ```
-$ make
+sudo apt-get -y install libglib2.0-dev libpixman-1-dev ninja-build libncurses5
 
-# Build the assembly startup file (first assembly code line called when
-# the processor starts. This generates the boot.o binary file
-./gcc-arm-none-eabi-9-2019-q4-major/bin/arm-none-eabi-gcc \
-  -mcpu=cortex-m3 \
-  -specs=nano.specs \
-  -specs=nosys.specs \
-  -specs=rdimon.specs \
-  -Wall -g3 \
-  -I./CMSIS_5/Device/ARM/ARMCM3/Include \
-  -I./CMSIS_5/CMSIS/Core/Include \
-  -I. \
-  -mthumb -nostartfiles \
-  -c CMSIS_5/Device/ARM/ARMCM3/Source/GCC/startup_ARMCM3.S -o boot.o
-
-# Compile the .c file and link the boot.o binary. The linker script
-# gcc_arm.ld is used by the linker to know where to put the different
-# sections of the program and at which address.
-# This line creates the cm3.elf program.
-./gcc-arm-none-eabi-9-2019-q4-major/bin/arm-none-eabi-gcc \
-  CMSIS_5/Device/ARM/ARMCM3/Source/system_ARMCM3.c \
-  start.c \
-  main.c \
-  boot.o \
-  -mcpu=cortex-m3 \
-  -specs=nano.specs \
-  -specs=nosys.specs \
-  -specs=rdimon.specs \
-  -Wall -g3 \
-  -I./CMSIS_5/Device/ARM/ARMCM3/Include \
-  -I./CMSIS_5/CMSIS/Core/Include \
-  -I. \
-  -mthumb \
-  -nostartfiles \
-  -T gcc_arm.ld -o cm3.elf
-
-# Dumps the content of the produced elf into the file objdump_cm3.elf
-# Can be used for inspection of the code and to analyse the assembly
-# code produced and the addresses of the functions.
-./gcc-arm-none-eabi-9-2019-q4-major/bin/arm-none-eabi-objdump \
-  -D cm3.elf > objdump_cm3.elf
+# This is already done through the submodule
+##  git clone https://github.com/qemu/qemu.git
+cd qemu
+mkdir -p build
+./configure
+make
 ```
 
-Now that the program is build, it can either be run or debugged. Note the flag
-(-g3) indicating that some symbols are put in the final binary to help the
-debug process.
+QEMU needs at least the following patches:
+http://next.patchew.org/QEMU/20180220180325.29818-1-peter.maydell@linaro.org/20180220180325.29818-2-peter.maydell@linaro.org/
 
-### Debug the project
-
-This can be done in two steps:
-- Start QEMU with the binary and request a gdbserver in one terminal
-
-```
-$ make gdbserver
-qemu-system-arm -machine lm3s6965evb -cpu cortex-m3 -m 4096 -nographic -semihosting -device loader,file=cm3.elf -machine accel=tcg -S -s -d int,cpu_reset
-
-CPU Reset (CPU 0)
-R00=00000000 R01=00000000 R02=00000000 R03=00000000
-R04=00000000 R05=00000000 R06=00000000 R07=00000000
-R08=00000000 R09=00000000 R10=00000000 R11=00000000
-R12=00000000 R13=00000000 R14=00000000 R15=00000000
-XPSR=40000000 -Z-- A priv-thread
-CPU Reset (CPU 0)
-R00=00000000 R01=00000000 R02=00000000 R03=00000000
-R04=00000000 R05=00000000 R06=00000000 R07=00000000
-R08=00000000 R09=00000000 R10=00000000 R11=00000000
-R12=00000000 R13=00000000 R14=ffffffff R15=00000000
-XPSR=40000000 -Z-- A priv-thread
-```
-
-A useful aspect of QEMU is that it can print logs when a process catches an exception.
-It indicates the logs that will be printed if a violation is detected:
+## Get Arm toolchain
+ 
+Get the toolchain from `https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-rm/downloads`.
+Tested using `gcc-arm-none-eabi-8-2018-q4-major`.
 
 ```
-Taking exception 4 [Data Abort]
-...with CFSR.DACCVIOL and MMFAR
-0x20010000
+wget "https://developer.arm.com/-/media/Files/downloads/gnu-rm/8-2019q3/RC1.1/gcc-arm-none-eabi-8-2019-q3-update-linux.tar.bz2?revision=c34d758a-be0c-476e-a2de-af8c6e16a8a2?product=GNU%20Arm%20Embedded%20Toolchain,64-bit,,Linux,8-2019-q3-update" -O gcc-arm-none-eabi-8-2019-q3-update-linux.tar.bz2
 
-Exception taken from a data violation; this
-means the program is inside the MemManage_Handler
+# Extract the archive
+tar xvf gcc-arm-none-eabi-8-2019-q3-update-linux.tar.bz2
 ```
 
-In the Makefile, you can add `-d int,cpu_reset` to print those traces from QEMU
-
-- Open another terminal and run gdb with the gdbserver as target.
+## Get CMSIS
 
 ```
-$ make gdb
-./gcc-arm-none-eabi-9-2019-q4-major/bin/arm-none-eabi-gdb cm3.elf -ex "target remote:1234"
-GNU gdb (GNU Tools for Arm Embedded Processors 9-2019-q4-major) 8.3.0.20190709-git
-Copyright (C) 2019 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-Type "show copying" and "show warranty" for details.
-This GDB was configured as "--host=x86_64-linux-gnu --target=arm-none-eabi".
-Type "show configuration" for configuration details.
-For bug reporting instructions, please see:
-<http://www.gnu.org/software/gdb/bugs/>.
-Find the GDB manual and other documentation resources online at:
-    <http://www.gnu.org/software/gdb/documentation/>.
-
-For help, type "help".
-Type "apropos word" to search for commands related to "word"...
-Reading symbols from cm3.elf...
-Remote debugging using :1234
-Reset_Handler () at CMSIS_5/Device/ARM/ARMCM3/Source/GCC/startup_ARMCM3.S:78
-78	                bl       SystemInit
-(gdb) 
+# This is already done through the submodule
+##  git clone https://github.com/ARM-software/CMSIS_5.git
 ```
 
-Now, typical gdb commands (step, next, continue, break,..) can be used to debug
-the program. Pressing CTRL+X + A, it is possible to need the source file with
-the line being debugged in highlight.
+Tested with commit-id 5865a4a5e511ab094bac46862bd358859ce5ccb4
 
-### Run
+Linker script is extracted from `$(CMSIS)/Device/ARM/ARMCM33/Source/GCC/gcc_arm.ld`
+and adapted for an505. See Chapter "SIE-200 Memory Map Overview" of
+Application Note AN505.
 
-If debug is not necessary, simply use `make run` and the program will execute
-and stop.
+## Build and start
+
+- Update path to toolchain, CMSIS and Qemu in the Makefile.
+- Compile using `make` and start with `make run`. Note: You might need to adjust
+  `CMSIS_PATH`, `QEMU_PATH` and `TOOLCHAIN_PATH` if they are not at the same
+  place.
+- Debug using `make gdbserver` and (in another terminal) `make gdb`.
+
+
+# References
+
+- https://arm-software.github.io/CMSIS_5/Zone/html/index.html for MPC configuration
+- https://developer.arm.com/documentation/dai0505/latest/ (Example IoT Kit Subsystem Design for a V2M-MPS2+) for the description of the AN505
+- https://developer.arm.com/documentation/101104/0200/introduction/about-the-sse-200 Arm CoreLink SSE-200 Subsystem for Embedded Technical Reference Manual
+- https://developer.arm.com/documentation/ecm0359818/latest ARMv8-M Security Extensions: Requirements on Development Tools - Engineering Specification
+- Arm Cortex-M33 Devices Generic User Guide for Register details
+
+

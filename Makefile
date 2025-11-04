@@ -1,146 +1,143 @@
-BINARY := cm3.elf
-MACHINE := lm3s6965evb
+BINARY_S = secure.elf
+BINARY_LIB_S = cmse_import.o
+BINARY_NS = nonsecure.elf
+BINARY_ALL = image_s_ns.elf
 
-# Variable with ?= assignement can be redefined when the makefile is called:
-# make TOOLCHAIN= QEMU_PATH= will update the variable of the Makefile
+MACHINE_NAME := mps2-an505
 
-CMSIS ?= ./CMSIS_5
-# Use QEMU_PATH= if QEMU was installed through the apt-get command.
-#QEMU_PATH ?= ./qemu/arm-softmmu/
-QEMU_PATH ?= /usr/bin/
-TOOLCHAIN ?= ./gcc-arm-none-eabi-9-2019-q4-major/bin/
+CMSIS_PATH ?= ./CMSIS_5
+#QEMU_PATH ?= ./qemu/build/arm-softmmu/qemu-system-arm
+QEMU_PATH ?= qemu-system-arm
+TOOLCHAIN_PATH ?= ./gcc-arm-none-eabi-8-2019-q3-update/bin
 
-QEMU_COMMAND := $(QEMU_PATH)qemu-system-arm
-
-# Add this in the QEMU_RUN_COMMAND to see all the exceptions taken
-## -d int,cpu_reset
-QEMU_RUN_COMMAND := $(QEMU_COMMAND) \
-  -machine $(MACHINE) \
-  -cpu cortex-m3 \
-  -m 4096 \
-  -nographic \
-  -semihosting \
-  --semihosting-config enable=on,target=native \
-  -serial mon:stdio \
-  -device loader,file=$(BINARY) \
-  -machine accel=tcg
-
-BINARY_OBJDUMP := objdump.txt
-
-CROSS_COMPILE = $(TOOLCHAIN)arm-none-eabi-
+CROSS_COMPILE = $(TOOLCHAIN_PATH)/arm-none-eabi-
 CC = $(CROSS_COMPILE)gcc
+LD = $(CROSS_COMPILE)ld
 GDB = $(CROSS_COMPILE)gdb
 OBJ = $(CROSS_COMPILE)objdump
+NM = $(CROSS_COMPILE)nm
+READELF = $(CROSS_COMPILE)readelf
 
-LINKER_SCRIPT = gcc_arm.ld
+LINKER_SCRIPT_NS = non_secure/gcc_arm_ns.ld
+# Must match the same value in the NS linker script where the vector table is.
+TZ_VTOR_TABLE_ADDR = 0x00200000
+LINKER_SCRIPT = secure/gcc_arm.ld
 
-SRC_ASM = $(CMSIS)/Device/ARM/ARMCM3/Source/GCC/startup_ARMCM3.S
-
-SRC_C = $(CMSIS)/Device/ARM/ARMCM3/Source/system_ARMCM3.c \
-        start.c \
-        uart.c
-
-## CMSIS RTX RTOS specific
-RTX_OS_CMSIS_SRC = $(wildcard $(CMSIS)/CMSIS/RTOS/RTX/SRC/*.c) \
-                   $(CMSIS)/CMSIS/RTOS/RTX/Templates/RTX_Conf_CM.c
-
-RTX_SRC_ASM = $(CMSIS)/CMSIS/RTOS/RTX/SRC/GCC/HAL_CM3.S
-RTX_SVC_ASM = $(CMSIS)/CMSIS/RTOS/RTX/SRC/GCC/SVC_Table.S
-
-RTX_INCLUDE_FLAGS = \
-  -I$(CMSIS)/CMSIS/RTOS/RTX/SRC \
-  -I$(CMSIS)/CMSIS/RTOS/RTX/INC
-
-## CMSIS RTX2 RTOS specific
-RTX2_OS_CMSIS_SRC = \
-  $(wildcard $(CMSIS)/CMSIS/RTOS2/RTX/Source/*.c) \
-  $(wildcard $(CMSIS)/CMSIS/RTOS2/RTX/Config/*.c)
-
-RTX2_SVC_ASM = $(CMSIS)/CMSIS/RTOS2/RTX/Source/GCC/irq_cm3.S
-
-RTX2_INCLUDE_FLAGS = \
-  -I$(CMSIS)/CMSIS/RTOS2/RTX/Include \
-  -I$(CMSIS)/CMSIS/RTOS2/Include \
-  -I$(CMSIS)/CMSIS/RTOS2/RTX/Config
-
-## Exercise source files
-3_8_1_SRC = $(wildcard chapt3_8/Ex1/*.c)
-3_8_1_SRC_ASM = chapt3_8/Ex1/startup_ARMCM3.S
-3_8_2_SRC = $(wildcard chapt3_8/Ex2/*.c)
-3_8_2_RTX2_SRC = $(wildcard chapt3_8/Ex2_rtx2/main.c)
-
-3_9_1_SRC = $(wildcard chapt3_9/Ex1/*.c)
-3_9_2_SRC = $(wildcard chapt3_9/Ex2/*.c)
+# From $(CMSIS_PATH)/Device/ARM/ARMCM33/Source/GCC/startup_ARMCM33.S
+SRC_ASM = secure/startup_ARMCM33.S
+# From $(CMSIS_PATH)/Device/ARM/ARMCM33/Source/system_ARMCM33.c
+SRC_C = \
+    secure/system_ARMCM33.c \
+	  secure/main.c \
+	  secure/main_mpu.c \
+	  common/logPrint.c \
+	  common/uart.c
 
 INCLUDE_FLAGS = \
-  -I$(CMSIS)/Device/ARM/ARMCM3/Include \
-  -I$(CMSIS)/CMSIS/Core/Include \
-  -I.
+    -I$(CMSIS_PATH)/Device/ARM/ARMCM33/Include \
+  	-I$(CMSIS_PATH)/CMSIS/Core/Include \
+  	-I./secure \
+  	-I./non_secure \
+  	-I./common
+
+COMMON_CFLAGS = \
+    -mcpu=cortex-m33 \
+    -g \
+    $(INCLUDE_FLAGS) \
+    -nostartfiles -ffreestanding \
+    -mthumb
 
 CFLAGS = \
-  -mcpu=cortex-m3 \
-  -specs=nano.specs \
-  -specs=nosys.specs \
-  -specs=rdimon.specs \
-  -Wall \
-  -g3 \
-  $(INCLUDE_FLAGS) \
-  -mthumb \
-  -nostartfiles \
-  -fdata-sections \
-  -ffunction-sections \
-  -Wl,--gc-sections \
-  -DARMCM3 \
-  -D__CORTEX_M3 \
-  -D__CMSIS_RTOS
+    $(COMMON_CFLAGS) \
+    -DARMCM33_DSP_FP_TZ \
+    -mcmse \
+    -DTZ_VTOR_TABLE_ADDR=$(TZ_VTOR_TABLE_ADDR) \
+    -specs=nano.specs -specs=nosys.specs \
+    -ffunction-sections \
+    -Wl,--gc-sections \
+    -DC_SECURE_CODE
 
-all: 3_8_1
+CFLAGS_NS = \
+    $(COMMON_CFLAGS) \
+    --specs=nosys.specs -DARMCM33 \
+    -DC_NON_SECURE_CODE
 
-boot.o: $(SRC_ASM)
+SECURE_LINKER_ARGS = \
+    -Xlinker --sort-section=alignment \
+    -Xlinker --cmse-implib \
+    -Xlinker --out-implib=$(BINARY_LIB_S) \
+    -Xlinker -Map=output.map
+
+OBJS = \
+    common/logPrint.o \
+    secure/system_ARMCM33.o \
+    secure/boot.o \
+    secure/main.o \
+    common/uart.o
+
+OBJS_NS = \
+    non_secure/main_ns.o \
+    non_secure/system_ARMCM33_ns.o \
+    non_secure/boot_ns.o \
+	  common/uart.o \
+	  $(BINARY_LIB_S)
+
+all: $(BINARY_S) $(BINARY_NS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+secure/boot.o: $(SRC_ASM)
 	$(CC) $(CFLAGS) -c $^ -o $@
 
-rtxsvc.o: $(RTX_SVC_ASM)
-	$(CC) $(CFLAGS) -c $^ -o $@
+non_secure/boot_ns.o: non_secure/boot_ns.S
+	$(CC) $(CFLAGS_NS) -c $^ -o $@
 
-rtxboot.o: $(RTX_SRC_ASM)
-	$(CC) $(CFLAGS) -c $^ -o $@
+# Generate two separate images (one for Non-Secure and another for Secure) with
+# different linker scripts (as they will have different addresses to locate the code).
+# This is to make sure that there is no clash with the symbols.
+$(BINARY_S): $(OBJS)
+	$(CC) $(CFLAGS) $(SECURE_LINKER_ARGS) $^ -T $(LINKER_SCRIPT) -o $@
+	$(NM) $@ > secure/nm_s.out
+	$(OBJ) -D $@ > secure/objdump_s.out
+	$(READELF) -a $@ > secure/readelf_s.out
 
-rtx2irq.o: $(RTX2_SVC_ASM)
-	$(CC) $(CFLAGS) -c $^ -o $@
+$(BINARY_NS): $(OBJS_NS)
+	$(CC) $^ $(CFLAGS_NS) -T $(LINKER_SCRIPT_NS) -o $@
+	$(NM) $@ > non_secure/nm_ns.out
+	$(OBJ) -D $@ > non_secure/objdump_ns.out
+	$(READELF) -a $@ > non_secure/readelf_ns.out
 
-3_8_1_boot.o: $(3_8_1_SRC_ASM)
-	$(CC) $(CFLAGS) -c $^ -o $@
+# Select the subsystem an505, specify the cortex-m33
+# Ctrl-A, then X to quit
+run: $(BINARY_S) $(BINARY_NS)
+	$(QEMU_PATH) \
+		-machine $(MACHINE_NAME) \
+		-cpu cortex-m33 \
+		-m 16M \
+		-nographic \
+		-semihosting \
+		-d int,cpu_reset \
+		-device loader,file=$(BINARY_NS) \
+		-device loader,file=$(BINARY_S)
 
-
-3_8_1: $(SRC_C) $(3_8_1_SRC) 3_8_1_boot.o
-	$(CC) $^ $(CFLAGS) -T $(LINKER_SCRIPT) -o $(BINARY)
-	$(OBJ) -D $(BINARY) > $@_$(BINARY_OBJDUMP)
-
-3_8_2: $(SRC_C) $(RTX_OS_CMSIS_SRC) $(3_8_2_SRC) rtxsvc.o rtxboot.o boot.o
-	$(CC) $^ $(CFLAGS) $(RTX_INCLUDE_FLAGS) -T $(LINKER_SCRIPT) -o $(BINARY)
-	$(OBJ) -D $(BINARY) > $@_$(BINARY_OBJDUMP)
-
-3_9_1: $(SRC_C) $(3_9_1_SRC) boot.o
-	$(CC) $^ $(CFLAGS) -T $(LINKER_SCRIPT) -o $(BINARY)
-	$(OBJ) -D $(BINARY) > $@_$(BINARY_OBJDUMP)
-
-3_9_2: $(SRC_C) $(3_9_2_SRC) boot.o
-	$(CC) $^ $(CFLAGS) -T $(LINKER_SCRIPT) -o $(BINARY)
-	$(OBJ) -D $(BINARY) > $@_$(BINARY_OBJDUMP)
-
-# Ctrl-A, then X to quit QEMU
-run: $(BINARY)
-	-$(QEMU_RUN_COMMAND)
-	echo $? " has exited"
-
-gdbserver: $(BINARY)
-	$(QEMU_RUN_COMMAND) -S -s
-
-help:
-	$(QEMU_COMMAND) --machine help
+gdbserver: $(BINARY_S) $(BINARY_NS)
+	$(QEMU_PATH) \
+		-machine $(MACHINE_NAME) \
+		-cpu cortex-m33 \
+		-m 16M \
+		-nographic \
+		-semihosting \
+		-device loader,file=$(BINARY_NS) \
+		-device loader,file=$(BINARY_S) \
+		-d int,cpu_reset \
+		-S -s 
 
 gdb: $(BINARY)
-	$(GDB) $(BINARY) -ex "target remote:1234"
+	$(GDB) $(BINARY_S) -ex "target remote:1234"
+
+help:
+	$(QEMU_PATH) --machine help
 
 clean:
-	rm -f $(BINARY_OBJDUMP) *.o *.elf *.txt
+	rm -f *.o *.elf *.out secure/*.out non_secure/*.out $(OBJS)

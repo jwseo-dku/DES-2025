@@ -99,6 +99,13 @@
       <th>Description</th>
     </tr>
     <tr>
+      <td>V5.5.3</td>
+      <td>
+       - CVE-2021-27431 vulnerability mitigation.
+       - Added OS Initialization for IAR.
+      </td>
+    </tr>
+    <tr>
       <td>V5.5.2</td>
       <td>
        - Added support for Cortex-M55.
